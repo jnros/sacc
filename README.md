@@ -14,7 +14,7 @@ Layout:
 ```
     spec.md         device specification 
     sacc_regs.h     shared register offsets and descriptors
-    driver/         PCIe device source code
+    qemu/           PCIe device source code
     driver/         Linux driver source code
     run_qemu.sh     boot Linux guest with SACC device
 ```
