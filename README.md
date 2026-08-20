@@ -40,9 +40,9 @@ Run:
     ...
     -+-[0000:00]-+-00.0  Intel Corporation 82G33/G31/P35/P31 Express DRAM Controller
     ...
-    \-[0000:80]-+-00.0-[81]--
+    \-[0000:80]-+-00.0-[81]--                                <-- second root complex (pxb-pcie)
     ...
-    +-06.0-[87]----00.0  Red Hat, Inc. Device 1092
+    +-06.0-[87]----00.0  Red Hat, Inc. Device 1092           <-- SACC, device 1092
 
     $ sudo insmod sacc.ko
     $ dmesg | tail -2
