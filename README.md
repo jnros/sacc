@@ -10,19 +10,22 @@ Writeup: https://lineargp.com/notes/2026-08-synthetic-pcie/
 
 Status: v0.1 minimal control path. Device identity, BAR layout, driver probe. Device boots in QEMU, enumerated in Linux, and device driver binds with PCI subsystem.
 
-Build QEMU device: 
+Build QEMU device:   
+```
     Clone qemu source into $qemu
     $ cp qemu/sacc.c $qemu/hw/misc
     <add to hw/misc/meson.build and hw/misc/Kconfig>
     $ cd $qemu && ./configure, enable SACC
     $ make -j
+```
 
-Build kernel driver:
-
+Build kernel driver:   
+```
     (Kernel headers required)
     $ cd driver && make
-
-Run: 
+```
+Run:   
+```
     ./run_qemu.sh - starts a q35 guest, pcie-root-port, and SACC behind it
 
     $ lspci -tv
@@ -37,15 +40,15 @@ Run:
     $ dmesg | tail -2
     sacc_pci_driver 0000:87:00.0: probe detected, initializing...
     sacc_pci_driver 0000:87:00.0: probe magic number validate 0x4A4E524F
+```
+Interface:   
 
-Interface:
-
-Bar0 is 8K. Page 0 4k holds register file. Page 1 4k holds doorbell. Completion ownership uses NVME-style phase bit.
+Bar0 is 8K. Page 0 4k holds register file. Page 1 4k holds doorbell. Completion ownership uses NVME-style phase bit.   
 
 Register map, descriptor formats, ownership rules, and memory barrier
-requirements are specified in spec.md.
+requirements are specified in spec.md.   
 
-## License
+## License   
 
 GPL-2.0
 
