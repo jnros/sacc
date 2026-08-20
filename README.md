@@ -10,6 +10,13 @@ Writeup: https://lineargp.com/notes/2026-08-synthetic-pcie/
 
 Status: v0.1 minimal control path. Device identity, BAR layout, driver probe. Device boots in QEMU, enumerated in Linux, and device driver binds with PCI subsystem.
 
+Layout:   
+    spec.md         device specification 
+    sacc_regs.h     shared register offsets and descriptors
+    driver/         PCIe device source code
+    driver/         Linux driver source code
+    run_qemu.sh     boot Linux guest with SACC device
+
 Build QEMU device:   
 ```
     Clone qemu source into $qemu
