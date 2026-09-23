@@ -49,4 +49,7 @@ sudo /home/jnros/src/qemu/build/qemu-system-x86_64 \
 -device pcie-root-port,id=rp2_13,bus=pxb2,chassis=3,slot=12 \
 -device pcie-root-port,id=rp2_14,bus=pxb2,chassis=3,slot=13 \
 -device sacc,bus=rp2_7 \
--nographic -netdev bridge,id=net0,br=br0 -device virtio-net-pci,netdev=net0,bus=rp1_2,mac=52:54:00:de:ad:01
+-nographic \
+-netdev bridge,id=net0,br=br0,helper=/usr/lib/qemu/qemu-bridge-helper \
+-device virtio-net-pci,netdev=net0,bus=rp1_2,mac=52:54:00:de:ad:01 \
+--trace "sacc_*"
