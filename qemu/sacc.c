@@ -12,6 +12,7 @@
 #include "hw/pci/pci.h"
 #include "hw/pci/msi.h"
 #include "hw/misc/sacc_regs.h"
+#include "trace.h"
 
 #define TYPE_PCI_SACC_DEVICE "sacc"
 #define SACC_BAR_SIZE 8192
@@ -36,7 +37,6 @@ struct SaccState {
     uint32_t irq_status;
     uint32_t irq_ack;
     uint32_t err_code;
-
     uint32_t sq_tail;
     uint32_t value;
 };
@@ -47,54 +47,94 @@ DECLARE_INSTANCE_CHECKER(SaccState, SACC, TYPE_PCI_SACC_DEVICE);
 static uint64_t sacc_mmio_reg_read(void *opaque, hwaddr addr, unsigned size)
 {
     SaccState *s = opaque;
+    uint64_t val;
 
     switch(addr) {
         case SACC_REG_MAGIC:
-            return s->magic;
+            val = s->magic;
+            break;
         case SACC_REG_VERSION:
-            return s->version;
+            val = s->version;
+            break;
         case SACC_REG_CTRL:
-            return s->ctrl;
+            val = s->ctrl;
+            break;
         case SACC_REG_STATUS:
-            return s->status;
+            val = s->status;
+            break;
         case SACC_REG_SQ_BASE_LO:
-            return (uint32_t) s->sq_base;
+            val = (uint32_t) s->sq_base;
+            break;
         case SACC_REG_SQ_BASE_HI:
-            return s->sq_base >> 32;
+            val = s->sq_base >> 32;
+            break;
         case SACC_REG_SQ_SIZE:
-            return s->sq_size;
+            val = s->sq_size;
+            break;
         case SACC_REG_CQ_BASE_LO:
-            return (uint32_t) s->cq_base;
+            val = (uint32_t) s->cq_base;
+            break;
         case SACC_REG_CQ_BASE_HI:
-            return s->cq_base >> 32;
+            val = s->cq_base >> 32;
+            break;
         case SACC_REG_CQ_SIZE:
-            return s->cq_size;
+            val = s->cq_size;
+            break;
         case SACC_REG_CQ_HEAD:
             return 0;
+            break;
         case SACC_REG_IRQ_STATUS:
-            return s->irq_status;
+            val = s->irq_status;
+            break;
         case SACC_REG_IRQ_ACK:
-            return 0;
+            val = 0;
+            break;
         case SACC_REG_ERR_CODE:
-            return s->err_code;
+            val = s->err_code;
+            break;
         default:
-            return 0;
+            val = 0;
+            break;
     }
+    trace_sacc_mmio_reg_read(addr, val, size);
+
+    return val;
 }
 
 static void sacc_mmio_reg_write(void *opaque, hwaddr addr, uint64_t val,
                 unsigned size)
 {
-/*
     SaccState *s = opaque;
+
+    trace_sacc_mmio_reg_write(addr, val, size);
+
     switch(addr) {
-        case 0x04:
-            s->value = val;
+	    case SACC_REG_CTRL:
+	        s->ctrl = (uint32_t) val;
+	        break;
+	    case SACC_REG_SQ_BASE_LO:
+	        s->sq_base = (s->sq_base & 0xffffffff00000000ULL) | (uint32_t) val;
+	        break;
+	    case SACC_REG_SQ_BASE_HI:
+		    s->sq_base = (s->sq_base & 0x00000000ffffffffULL) | \
+                         ((uint64_t)(uint32_t)val << 32);
+		    break;
+	    case SACC_REG_SQ_SIZE:
+	        s->sq_size = (uint32_t) val;
+	        break;
+	    case SACC_REG_CQ_BASE_LO:
+	        s->cq_base = (s->cq_base & 0xffffffff00000000ULL) | (uint32_t) val;
+	        break;
+	    case SACC_REG_CQ_BASE_HI:
+		    s->cq_base = (s->cq_base & 0x00000000ffffffffULL) | \
+                         ((uint64_t)(uint32_t)val << 32);
+		    break;
+	    case SACC_REG_CQ_SIZE:
+	        s->cq_size = (uint32_t) val;
+	        break;
+        default:
             break;
     }
-    */
-    ;
-
 }
 
 static const MemoryRegionOps sacc_mmio_reg_ops = {
