@@ -9,6 +9,7 @@ SACC substitutes a device whose register map, ring semantics, and completion pro
 Writeup: https://lineargp.com/notes/2026-08-synthetic-pcie/
 
 Status: v0.1 minimal control path. Device identity, BAR layout, driver probe. Device boots in QEMU, enumerated in Linux, and device driver binds with PCI subsystem.
+WIP - Single SQ and CQ allocated and device regs written. Initial doorbell pending. 
 
 Layout:   
 ```
