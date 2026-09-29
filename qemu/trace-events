@@ -446,3 +446,11 @@ iommu_testdev_dma_armed(bool armed) "armed=%d"
 # sacc.c
 sacc_mmio_reg_read(uint64_t addr, uint64_t val, unsigned size) "addr=0x%" PRIx64 " val=0x%" PRIx64 " size=%u"
 sacc_mmio_reg_write(uint64_t addr, uint64_t val, unsigned size) "addr=0x%" PRIx64 " val=0x%" PRIx64 " size=%u"
+sacc_doorbell(uint32_t tail) "sq_tail=%u"
+sacc_sq_fetch(uint32_t idx, uint64_t src, uint64_t dst, uint32_t len, uint16_t op, uint16_t flags, uint32_t req_id) "idx=%u src=0x%" PRIx64 " dst=0x%" PRIx64 " len=%u op=0x%x flags=0x%x req_id=0x%x"
+sacc_sq_fetch_err(uint32_t idx, uint64_t addr) "idx=%u dma read failed at 0x%" PRIx64
+sacc_cq_full(uint32_t cq_tail, uint32_t cq_head) "cq_tail=%u cq_head=%u"
+sacc_cq_post_err(uint32_t cq_tail, uint64_t addr) "cq_tail=%u dma write failed at 0x%" PRIx64
+sacc_cq_post(uint32_t cq_tail, uint32_t req_id, uint16_t status, uint32_t result_len, uint16_t phase) "cq_tail=%u req_id=0x%x status 0x%x result_len %u phase 0x%x"
+sacc_exec(uint32_t req_id, uint16_t op, uint32_t len) "req_id=0x%x op 0x%x len %u"
+sacc_exec_err(uint32_t req_id, uint16_t status) "req_id=0x%x status 0x%x"
