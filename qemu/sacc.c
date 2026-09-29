@@ -31,13 +31,16 @@ struct SaccState {
     uint32_t status;
     uint64_t sq_base;
     uint32_t sq_size;
+    uint32_t sq_head;
+    uint32_t sq_tail;
     uint64_t cq_base;
     uint32_t cq_size;
     uint32_t cq_head;
+    uint32_t cq_tail;
+    uint16_t cq_phase;
     uint32_t irq_status;
     uint32_t irq_ack;
     uint32_t err_code;
-    uint32_t sq_tail;
     uint32_t value;
 };
 
@@ -132,6 +135,9 @@ static void sacc_mmio_reg_write(void *opaque, hwaddr addr, uint64_t val,
 	    case SACC_REG_CQ_SIZE:
 	        s->cq_size = (uint32_t) val;
 	        break;
+	    case SACC_REG_CQ_HEAD:
+	        s->cq_head = (uint32_t) val;
+	        break;
         default:
             break;
     }
@@ -145,6 +151,42 @@ static const MemoryRegionOps sacc_mmio_reg_ops = {
     .impl = { .min_access_size = 4, .max_access_size = 4 },
 };
 
+static int sacc_cq_post(SaccState *s, uint32_t req_id, uint16_t status,
+		uint32_t result_len)
+{
+    struct sacc_cq_entry ce = {
+        .req_id     = cpu_to_le32(req_id),
+        .result_len = cpu_to_le32(result_len),
+        .status     = cpu_to_le16(status),
+    };
+    dma_addr_t a = s->cq_base + (dma_addr_t)s->cq_tail * sizeof(ce);
+    uint16_t phase = cpu_to_le16(s->cq_phase);
+
+    if ((s->cq_tail + 1) % s->cq_size == s->cq_head) {
+        trace_sacc_cq_full(s->cq_tail, s->cq_head);
+        return 1;                      /* stall */
+    }
+
+    /* 1) write everything except phase (first 14 of 16 bytes) */
+    if (pci_dma_write(&s->pdev, a, &ce, offsetof(struct sacc_cq_entry, phase)) != MEMTX_OK ||
+    /* 2) then write phase (last 2 of 16 bytes), publishing the entry for slot */
+        pci_dma_write(&s->pdev, a + offsetof(struct sacc_cq_entry, phase),
+                      &phase, sizeof(phase)) != MEMTX_OK) {
+        trace_sacc_cq_post_err(s->cq_tail, a);
+        return 1;
+    }
+
+    /* s->cq->tail is the slot number, phase is 1 upon init */
+    trace_sacc_cq_post(s->cq_tail, req_id, status, result_len, s->cq_phase);
+
+    if (++s->cq_tail == s->cq_size) {
+        s->cq_tail = 0;
+        s->cq_phase ^= 1;                  /* flip on wrap */
+    }
+
+    return 0;
+}
+	
 static uint64_t sacc_mmio_db_read(void *opaque, hwaddr addr, unsigned size)
 {
     return 0;
@@ -154,12 +196,58 @@ static void sacc_mmio_db_write(void *opaque, hwaddr addr, uint64_t val,
                 unsigned size)
 {
     SaccState *s = opaque;
+    struct sacc_sq_desc sd;
+    uint64_t dma_addr;
+    uint32_t req_id;
+    uint32_t len;
+    uint16_t op;
+    uint16_t status;
 
-    if (addr != 0) {
+    if ((addr != 0) || (s->sq_size == 0)) {
             return;
     }
      
-    s->sq_tail = val;
+    s->sq_tail = val % s->sq_size;
+    trace_sacc_doorbell(s->sq_tail);
+
+    /* refactor consumption loop soon */
+    while (s->sq_head != s->sq_tail) {
+	    struct sacc_sq_desc desc;
+	    dma_addr = s->sq_base + ((dma_addr_t)s->sq_head * sizeof(desc));
+
+	    /* fetch */
+	    if (pci_dma_read(&s->pdev, dma_addr, &sd, sizeof(sd)) != MEMTX_OK) {
+		    trace_sacc_sq_fetch_err(s->sq_head, dma_addr);	
+	    }
+	        req_id = le32_to_cpu(sd.req_id);
+	        len = le32_to_cpu(sd.len);
+		    op = le16_to_cpu(sd.opcode);
+
+	        trace_sacc_sq_fetch(s->sq_head, le64_to_cpu(sd.src_addr),
+	    	    le64_to_cpu(sd.dst_addr), le32_to_cpu(sd.len),
+	    	    op, le16_to_cpu(sd.flags),
+	    	    req_id);
+
+            /* execute sq work */
+	    status = SACC_ERR_OK;
+	    trace_sacc_exec(req_id, op, len);
+	    switch (op) {
+		    case SACC_OP_NOP:
+			    break;
+		    default:
+		            status = SACC_ERR_BAD_OPCODE;
+	    		    trace_sacc_exec_err(req_id, status);
+			    break;
+	    }
+
+	    /* post completion */
+	    if (sacc_cq_post(s, req_id, status, 0) != 0) {
+		    return; 	// CQ FULL
+	    }
+
+	    /* desc finished */
+    	    s->sq_head = (s->sq_head + 1) % s->sq_size;
+    }
 }
 
 static const MemoryRegionOps sacc_mmio_db_ops = {
@@ -184,6 +272,7 @@ static void pci_sacc_realize(PCIDevice *pdev, Error **errp)
     s->cq_base = 0ll;
     s->cq_size = 0;
     s->cq_head = 0;
+    s->cq_phase = 1;
     s->irq_status = 0;
     s->irq_ack = 0;
     s->err_code = 0;
