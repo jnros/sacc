@@ -42,11 +42,40 @@
 /* IRQ bits */
 #define SACC_IRQ_COMPLETION     (1u << 0)
 
+/* Op codes */
+#define SACC_OP_NOP		0x0
+#define SACC_OP_MEMCPY		0x1
+#define SACC_OP_XFORM		0x2
+
 /* Error codes */
 #define SACC_ERR_OK             0x0
 #define SACC_ERR_BAD_OPCODE     0x1
 #define SACC_ERR_BAD_ADDR       0x2
 #define SACC_ERR_BAD_LENGTH     0x3
 #define SACC_ERR_NOT_ENABLED    0x4
+
+#ifdef __KERNEL__
+#include <linux/types.h>
+#else
+#include <stdint.h>
+#endif
+
+struct sacc_sq_desc {
+	uint64_t src_addr;
+	uint64_t dst_addr;
+	uint32_t len;
+	uint16_t opcode;
+	uint16_t flags;
+	uint32_t req_id;
+	uint32_t reserved;
+} __attribute__((packed));
+
+struct sacc_cq_entry {
+	uint32_t req_id;
+	uint32_t result_len;
+	uint32_t reserved;
+	uint16_t status;
+	uint16_t phase;
+} __attribute__((packed));
 
 #endif
