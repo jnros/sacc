@@ -47,7 +47,7 @@ static inline int sacc_cq_ready(struct sacc_cq_entry *ce, u16 phase)
 
 #define CQ_POLL_TRIES 1000
 
-static int sacc_poll_cq(struct pci_dev *pdev, struct sacc_dma *sdma,
+static int sacc_poll_cq(struct pci_dev *pdev, int req_id, struct sacc_dma *sdma,
 		void __iomem *mmio_base) 
 {
 	struct sacc_cq_entry *ce = &sdma->cq[sdma->cq_head];
@@ -68,7 +68,14 @@ static int sacc_poll_cq(struct pci_dev *pdev, struct sacc_dma *sdma,
 
 	dma_rmb();
 
-	dev_info(&pdev->dev, "completion: req_id = 0x%x status 0x%x len=%u\n",
+	if (ce->req_id != req_id) {
+		dev_err(&pdev->dev, "CQ poll: unexpected req %d got %d\n",
+				req_id, ce->req_id);
+		return -1;
+
+	}
+
+	dev_info(&pdev->dev, "completion: req_id = %d status 0x%x len=%u\n",
 			le32_to_cpu(ce->req_id), le16_to_cpu(ce->status),
 			le32_to_cpu(ce->result_len));
 
@@ -84,7 +91,7 @@ static int sacc_poll_cq(struct pci_dev *pdev, struct sacc_dma *sdma,
 }
 
 
-static int sacc_doorbell_init(struct pci_dev *pdev, struct sacc_dma *sdma, 
+static int sacc_doorbell_init(struct pci_dev *pdev, int req_id, struct sacc_dma *sdma, 
 	                      void * mmdb_base) {
 	struct sacc_sq_desc *sdesc = &sdma->sq[sdma->sq_tail];
 
@@ -97,11 +104,15 @@ static int sacc_doorbell_init(struct pci_dev *pdev, struct sacc_dma *sdma,
 	}
 
 	memset(sdesc, 0, sizeof(struct sacc_sq_desc));
-	sdesc->req_id = 0x0001;
+	sdesc->req_id = req_id;
 	sdesc->opcode = SACC_OP_NOP;
 
 	/* incr ring buf tail w wrap */
 	sdma->sq_tail = (sdma->sq_tail + 1) % sdma->sq_depth; 
+
+	dev_info(&pdev->dev, 
+		 "ring device doorbell: req id %d for slot/tail %d\n", 
+		 sdesc->req_id, sdma->sq_tail);
 
 	/* Submission step 2: ring the doorbell on device side */
 	iowrite32(sdma->sq_tail, mmdb_base);
@@ -140,9 +151,12 @@ static int sacc_init_dma(struct pci_dev *pdev, struct sacc_dma *sdma) {
 	return 0;
 }
 
+#define DBP_TEST 100
+
 static int sacc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int rc;
+	int req_id;
 	void __iomem *mmio_base;
 	void __iomem *mmdb_base;
 	u32 magic;
@@ -214,11 +228,15 @@ static int sacc_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	pci_set_drvdata(pdev, mmio_base);
 
-	sacc_doorbell_init(pdev, &sdma, mmdb_base);
+	dev_info(&pdev->dev, "probe: doorbell and poll %d iterations\n", DBP_TEST);
+	for (req_id = 1; req_id <= DBP_TEST; req_id++) {
+		dev_info(&pdev->dev, "probe: doorbell and poll for req id %d\n", req_id);
+		sacc_doorbell_init(pdev, req_id, &sdma, mmdb_base);
 
-	rc = sacc_poll_cq(pdev, &sdma, mmio_base);
-	if (rc)
-		return rc;
+		rc = sacc_poll_cq(pdev, req_id, &sdma, mmio_base);
+		if (rc)
+			return rc;
+	}
 
 	/* insert IRQ reg */
 	return 0;
