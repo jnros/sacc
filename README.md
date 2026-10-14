@@ -1,16 +1,25 @@
 # SACC: Synthetic PCIe Accelerator
 
-PCIe accelerator implemented two ways: as a device in QEMU and in a kernel driver. Both are based on spec.md, which is the authoratative source.
+PCIe accelerator implemented two ways: as a device in QEMU and in a kernel driver. Both are based on spec.md, which is the authoritative source.
 
-GPUs/Accelerators submit work through mapped command buffers and doorbell reads and writes. Control plane sits below the Linux kernel and inside proprietary drivers. 
+GPUs/Accelerators submit work through mapped command buffers and doorbell writes. Control plane sits below the Linux kernel and inside proprietary drivers. 
 
 SACC substitutes a device whose register map, ring semantics, and completion protocol are open, minimal, and built to spec.
 
-Writeup: https://lineargp.com/notes/2026-08-synthetic-pcie/
+Writeups:
+- https://lineargp.com/notes/2026-08-synthetic-pcie/ (device, driver, topology)
+- https://lineargp.com/notes/2026-10-pcie-doorbells-dma/ (rings, doorbells, DMA)
 
-Status: v0.1 minimal control path. Device identity, BAR layout, driver probe. Device boots in QEMU, enumerated in Linux, and device driver binds with PCI subsystem.  
+Status:
+- v0.1 control path. Device identity, BAR layout, driver probe. Device boots
+  in QEMU, enumerates in Linux, driver binds via PCI subsystem.
+- Rings and doorbells. Single SQ/CQ pair (64 entries each) in host memory,
+  allocated by driver. Driver writes NOOP descriptor, rings SQ tail doorbell.
+  Device DMA-reads descriptors, DMA-writes completions. Driver polls CQ phase
+  bit, writes CQ head. Probe runs 100 submit/poll iterations; rings wrap,
+  phase flips.
 
-WIP - Single SQ populated with NOOP, doorbell added host to device. Completion posted device to host, polled and confirmed host side. Next, looped submisisons and polling, then move out of kernel space
+Next: move submission/completion to userspace (full kernel bypass), MSI-X.
 
 Layout:   
 ```
@@ -24,7 +33,7 @@ Build QEMU device:
 ```
     Clone qemu source into $qemu
     $ cp qemu/sacc.c $qemu/hw/misc
-    <add to hw/misc/meson.build and hw/misc/Kconfig>
+    <add to hw/misc/meson.build, hw/misc/Kconfig, hw/misc/trace-events>
     $ cd $qemu && ./configure, enable SACC
     $ make -j
 ```
@@ -51,9 +60,21 @@ Run:
     sacc_pci_driver 0000:87:00.0: probe detected, initializing...
     sacc_pci_driver 0000:87:00.0: probe magic number validate 0x4A4E524F
 ```
+Trace (QEMU side, `-trace "sacc_*"`):
+```
+    sacc_doorbell sq_tail=1
+    sacc_sq_fetch idx=0 ... req_id=0x1
+    sacc_cq_post cq_tail=63 req_id=0x40 ... phase 0x1
+    sacc_cq_post cq_tail=0 req_id=0x41 ... phase 0x0    <-- wrap, phase flips
+```
+Debug: QEMU monitor (`xp /8wx <addr>`) dumps guest memory, e.g. SQ
+descriptors at SQ_BASE, to split driver bugs from device bugs.
+
 Interface:   
 
-Bar0 is 8K. Page 0 4k holds register file. Page 1 4k holds doorbell. Completion ownership uses NVME-style phase bit.   
+BAR0 is 8K. Page 0 (4K) holds register file. Page 1 (4K) holds doorbell, so
+userspace can mmap it without register access. Completion ownership uses
+NVMe-style phase bit; host never reads device to check completion.
 
 Register map, descriptor formats, ownership rules, and memory barrier
 requirements are specified in spec.md.   
